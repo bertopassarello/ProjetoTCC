@@ -1,0 +1,75 @@
+services:
+  # Backend Python (FastAPI)
+  python-backend:
+    build:
+      context: ./python-backend
+      dockerfile: Dockerfile
+    container_name: mercadolive-python
+    restart: unless-stopped
+    ports:
+      - "8383:8383"
+    volumes:
+      - ./python-backend/database:/app/database
+      - ./python-backend/templates:/app/templates
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8383
+      - DEBUG=True
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - SUPABASE_OFERTASSHIP_URL=${SUPABASE_OFERTASSHIP_URL:-}
+      - SUPABASE_OFERTASSHIP_KEY=${SUPABASE_OFERTASSHIP_KEY:-}
+    env_file:
+      - .env
+    networks:
+      - mercadolive-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8383/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Backend WhatsApp (Baileys/Node.js)
+  whatsapp-backend:
+    build:
+      context: ./whatsapp-backend
+      dockerfile: Dockerfile
+    container_name: mercadolive-whatsapp
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./whatsapp-backend/auth_info_baileys:/app/auth_info_baileys
+      - ./whatsapp-backend/saved_groups.json:/app/saved_groups.json
+    environment:
+      - NODE_ENV=production
+      - PORT=3030
+    networks:
+      - mercadolive-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Cloudflare Quick Tunnel - URL gratuita automática
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: mercadolive-cloudflared
+    restart: unless-stopped
+    command: tunnel --url http://python-backend:8383
+    networks:
+      - mercadolive-network
+    depends_on:
+      - python-backend
+      - whatsapp-backend
+
+networks:
+  mercadolive-network:
+    driver: bridge
+
+volumes:
+  database:
+  auth_info:
